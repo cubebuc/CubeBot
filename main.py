@@ -12,10 +12,9 @@ token = os.getenv('DISCORD_TOKEN')
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 
 intents = discord.Intents.default()
-intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='$', intents=intents)
 
 ping_name = 'Ping'
 pong_name = 'Pong'
@@ -125,8 +124,8 @@ class MainCog(commands.Cog):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    ping = discord.utils.get(member.guild.voice_channels, name='Ping')
-    pong = discord.utils.get(member.guild.voice_channels, name='Pong')
+    ping = discord.utils.get(member.guild.voice_channels, name=ping_name)
+    pong = discord.utils.get(member.guild.voice_channels, name=pong_name)
 
     if not ping or not pong:
         return

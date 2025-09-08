@@ -22,7 +22,7 @@ pong_name = 'Pong'
 origins = {}
 tasks = {}
 
-async def bouncer(member: discord.Member, delay=3.0, limit=10):
+async def bouncer(member: discord.Member, delay=1.0, limit=30):
     try:
         ping = discord.utils.get(member.guild.voice_channels, name=ping_name)
         if ping is None:
@@ -99,6 +99,7 @@ class MainCog(commands.Cog):
     @app_commands.command(name='wakes', description='Wakes someone up!')
     @app_commands.describe(members='Who to wakes up')
     async def wakes(self, interaction: discord.Interaction, members: str):
+        names = []
         for mention in members.split():
             if not mention.startswith('<@') or not mention.endswith('>'):
                 continue
@@ -120,7 +121,8 @@ class MainCog(commands.Cog):
             if not pong:
                 await guild.create_voice_channel(pong_name)
             tasks[member.id] = asyncio.create_task(bouncer(member))
-        await interaction.response.send_message(f'Ping Pong? BING BONG!', ephemeral=True)
+            names.append(member.name)
+        await interaction.response.send_message(f'Ping Pong {", ".join(names)}... or... BING BONG?!', ephemeral=True)
 
 @bot.event
 async def on_voice_state_update(member, before, after):

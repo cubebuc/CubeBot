@@ -5,6 +5,7 @@ import logging
 from dotenv import load_dotenv
 import os
 import asyncio
+import json
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -21,6 +22,24 @@ pong_name = 'Pong'
 
 origins = {}
 tasks = {}
+
+stats_file = 'stats.json'
+if os.path.exists(stats_file):
+    with open(stats_file, 'r') as f:
+        stats = json.load(f)
+else:
+    stats = {}
+
+def add_stat(user_id, stat):
+    user_id = str(user_id)
+    if stat not in stats:
+        stats[stat] = {}
+    stats[stat][user_id] = stats[stat].get(user_id, 0) + 1
+    save_stats()
+
+def save_stats():
+    with open(stats_file, 'w') as f:
+        json.dump(stats, f)
 
 async def bouncer(member: discord.Member, delay=1.0, limit=30):
     try:
@@ -78,11 +97,11 @@ class MainCog(commands.Cog):
     @app_commands.describe(member='Who to wake up')
     async def wake(self, interaction: discord.Interaction, member: discord.Member):
         if member.id in tasks:
-            await interaction.response.send_message(f'Chill out... {member.name} will wake up eventually.', ephemeral=True)
+            await interaction.response.send_message(f'Chill out... {member.nick or member.name} will wake up eventually.', ephemeral=True)
             return
 
         if member.voice is None or member.voice.channel is None:
-            await interaction.response.send_message(f'User {member.name} is not in a voice channel.', ephemeral=True)
+            await interaction.response.send_message(f'User {member.nick or member.name} is not in a voice channel.', ephemeral=True)
             return
 
         origins[member.id] = member.voice.channel.id
@@ -95,6 +114,10 @@ class MainCog(commands.Cog):
             await guild.create_voice_channel(pong_name)
         tasks[member.id] = asyncio.create_task(bouncer(member))
         await interaction.response.send_message(f'Ping Pong {member.mention}... or... BING BONG?!', ephemeral=True)
+
+        add_stat(interaction.user.id, 'abusers')
+        add_stat(member.id, 'victims')
+
 
     @app_commands.command(name='wakes', description='Wakes someone up!')
     @app_commands.describe(members='Who to wakes up')
@@ -121,8 +144,36 @@ class MainCog(commands.Cog):
             if not pong:
                 await guild.create_voice_channel(pong_name)
             tasks[member.id] = asyncio.create_task(bouncer(member))
-            names.append(member.name)
+            names.append(member.nick or member.name)
+
+            add_stat(member.id, 'victims')
+
         await interaction.response.send_message(f'Ping Pong {", ".join(names)}... or... BING BONG?!', ephemeral=True)
+
+        add_stat(interaction.user.id, 'abusers')
+
+    @app_commands.command(name='stats', description='Show stats')
+    async def stats(self, interaction: discord.Interaction):
+        abusers = stats.get('abusers', {})
+        victims = stats.get('victims', {})
+
+        top_abusers = sorted(abusers.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_victims = sorted(victims.items(), key=lambda x: x[1], reverse=True)[:3]
+
+        def format_stats(stat_list):
+            trophies = ['🥇', '🥈', '🥉']
+            lines = []
+            for i, (user_id, count) in enumerate(stat_list):
+                user = interaction.guild.get_member(int(user_id))
+                if user:
+                    lines.append(f'{trophies[i]}  {user.nick or user.name}  -  {count}')
+            return '\n'.join(lines) if lines else 'No data'
+
+        embed = discord.Embed(title='Ping Pong Stats', color=discord.Color.blue())
+        embed.add_field(name='Top Abusers', value=format_stats(top_abusers), inline=False)
+        embed.add_field(name='Top Victims', value=format_stats(top_victims), inline=False)
+
+        await interaction.response.send_message(embed=embed)
 
 @bot.event
 async def on_voice_state_update(member, before, after):

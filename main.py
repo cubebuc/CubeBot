@@ -35,7 +35,6 @@ def add_stat(user_id, stat):
     if stat not in stats:
         stats[stat] = {}
     stats[stat][user_id] = stats[stat].get(user_id, 0) + 1
-    save_stats()
 
 def save_stats():
     with open(stats_file, 'w') as f:
@@ -117,6 +116,7 @@ class MainCog(commands.Cog):
 
         add_stat(interaction.user.id, 'abusers')
         add_stat(member.id, 'victims')
+        save_stats()
 
 
     @app_commands.command(name='wakes', description='Wakes someone up!')
@@ -147,10 +147,10 @@ class MainCog(commands.Cog):
             names.append(member.nick or member.name)
 
             add_stat(member.id, 'victims')
+            add_stat(interaction.user.id, 'abusers')
 
+        save_stats()
         await interaction.response.send_message(f'Ping Pong {", ".join(names)}... or... BING BONG?!', ephemeral=True)
-
-        add_stat(interaction.user.id, 'abusers')
 
     @app_commands.command(name='stats', description='Show stats')
     async def stats(self, interaction: discord.Interaction):

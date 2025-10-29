@@ -1,3 +1,4 @@
 .env
 .idea/
 discord.log
+cubebot.db

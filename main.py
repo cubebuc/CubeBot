@@ -5,7 +5,7 @@ import logging
 from dotenv import load_dotenv
 import os
 import asyncio
-import json
+import sqlite3
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -23,22 +23,26 @@ pong_name = 'Pong'
 origins = {}
 tasks = {}
 
-stats_file = 'stats.json'
-if os.path.exists(stats_file):
-    with open(stats_file, 'r') as f:
-        stats = json.load(f)
-else:
-    stats = {}
+conn = sqlite3.connect('cubebot.db')
+write_cursor = conn.cursor()
 
-def add_stat(user_id, stat):
-    user_id = str(user_id)
-    if stat not in stats:
-        stats[stat] = {}
-    stats[stat][user_id] = stats[stat].get(user_id, 0) + 1
+write_cursor.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    abuser INTEGER DEFAULT 0,
+    victim INTEGER DEFAULT 0
+)
+''')
+conn.commit()
 
-def save_stats():
-    with open(stats_file, 'w') as f:
-        json.dump(stats, f)
+
+def increment_stat(user_id: int, stat_type: str):
+    write_cursor.execute(f'''
+    INSERT INTO users (user_id, {stat_type}) VALUES (?, 1)
+    ON CONFLICT DO UPDATE SET {stat_type} = {stat_type} + 1
+    ''', (user_id,))
+    conn.commit()
+
 
 async def bouncer(member: discord.Member, delay=1.0, limit=30):
     try:
@@ -48,7 +52,8 @@ async def bouncer(member: discord.Member, delay=1.0, limit=30):
         await member.move_to(ping)
         await asyncio.sleep(delay)
         guild = member.guild
-        while member.voice and member.voice.channel and member.voice.channel.name in (ping_name, pong_name) and limit > 0:
+        while member.voice and member.voice.channel and member.voice.channel.name in (
+        ping_name, pong_name) and limit > 0:
             limit -= 1
             ping = discord.utils.get(guild.voice_channels, name=ping_name)
             pong = discord.utils.get(guild.voice_channels, name=pong_name)
@@ -88,6 +93,7 @@ async def bouncer(member: discord.Member, delay=1.0, limit=30):
             except (discord.Forbidden, discord.HTTPException):
                 pass
 
+
 class MainCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -114,10 +120,8 @@ class MainCog(commands.Cog):
         tasks[member.id] = asyncio.create_task(bouncer(member))
         await interaction.response.send_message(f'Ping Pong {member.mention}... or... BING BONG?!', ephemeral=True)
 
-        add_stat(interaction.user.id, 'abusers')
-        add_stat(member.id, 'victims')
-        save_stats()
-
+        increment_stat(interaction.user.id, 'abuser')
+        increment_stat(member.id, 'victim')
 
     @app_commands.command(name='wakes', description='Wakes someone up!')
     @app_commands.describe(members='Who to wakes up')
@@ -146,25 +150,24 @@ class MainCog(commands.Cog):
             tasks[member.id] = asyncio.create_task(bouncer(member))
             names.append(member.nick or member.name)
 
-            add_stat(member.id, 'victims')
-            add_stat(interaction.user.id, 'abusers')
+            increment_stat(member.id, 'victim')
+            increment_stat(interaction.user.id, 'abuser')
 
-        save_stats()
         await interaction.response.send_message(f'Ping Pong {", ".join(names)}... or... BING BONG?!', ephemeral=True)
 
     @app_commands.command(name='stats', description='Show stats')
     async def stats(self, interaction: discord.Interaction):
-        abusers = stats.get('abusers', {})
-        victims = stats.get('victims', {})
-
-        top_abusers = sorted(abusers.items(), key=lambda x: x[1], reverse=True)[:3]
-        top_victims = sorted(victims.items(), key=lambda x: x[1], reverse=True)[:3]
+        cur = conn.cursor()
+        cur.execute('SELECT user_id, abuser FROM users ORDER BY abuser DESC LIMIT 3')
+        top_abusers = cur.fetchall()
+        cur.execute('SELECT user_id, victim FROM users ORDER BY victim DESC LIMIT 3')
+        top_victims = cur.fetchall()
 
         def format_stats(stat_list):
             trophies = ['🥇', '🥈', '🥉']
             lines = []
             for i, (user_id, count) in enumerate(stat_list):
-                user = interaction.guild.get_member(int(user_id))
+                user = interaction.guild.get_member(user_id)
                 if user:
                     lines.append(f'{trophies[i]}  {user.nick or user.name}  -  {count}')
             return '\n'.join(lines) if lines else 'No data'
@@ -174,6 +177,7 @@ class MainCog(commands.Cog):
         embed.add_field(name='Top Victims', value=format_stats(top_victims), inline=False)
 
         await interaction.response.send_message(embed=embed)
+
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -188,10 +192,12 @@ async def on_voice_state_update(member, before, after):
         await tasks[member.id].cancel()
         return
 
+
 @bot.event
 async def on_ready():
     await bot.add_cog(MainCog(bot))
     await bot.tree.sync()
     print(f'Logged in as {bot.user}')
+
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

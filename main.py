@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from cogs.wake_cog import WakeCog
+from cogs import WakeCog, ShopCog
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -24,16 +24,28 @@ cursor = conn.cursor()
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
+    bananas INTEGER DEFAULT 0,
+    last_daily TEXT,
     abuser INTEGER DEFAULT 0,
     victim INTEGER DEFAULT 0
+)
+''')
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS traps (
+    channel_id INTEGER PRIMARY KEY,
+    count INTEGER DEFAULT 0
 )
 ''')
 conn.commit()
 
 @bot.event
 async def on_ready():
-    await bot.add_cog(WakeCog(conn))
-    await bot.tree.sync()
+    guild = discord.Object(id=554729922548203551)
+
+    await bot.add_cog(WakeCog(conn), guild=guild)
+    await bot.add_cog(ShopCog(conn), guild=guild)
+    await bot.tree.sync(guild=guild)
+
     print(f'Logged in as {bot.user}')
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

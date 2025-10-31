@@ -43,7 +43,7 @@ async def on_ready():
     guild = discord.Object(id=554729922548203551)
 
     await bot.add_cog(WakeCog(conn), guild=guild)
-    await bot.add_cog(ShopCog(conn), guild=guild)
+    await bot.add_cog(ShopCog(bot, conn), guild=guild)
     await bot.tree.sync(guild=guild)
 
     print(f'Logged in as {bot.user}')

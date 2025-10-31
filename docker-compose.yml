@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  bot:
+    container_name: bot
+    build: .
+    volumes:
+      - ./cubebot.db:/app/cubebot.db
+    restart: unless-stopped

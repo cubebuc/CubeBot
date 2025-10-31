@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   bot:
+    image: cubebot
     container_name: bot
     build: .
     volumes:

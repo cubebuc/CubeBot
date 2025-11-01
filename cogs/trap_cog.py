@@ -23,6 +23,7 @@ class TrapCog(commands.Cog):
         cursor.execute('SELECT channel_id, count FROM traps')
         traps = cursor.fetchall()
 
+        triggered = False
         for channel_id, count in traps:
             # skip if trapped channel not involved
             if (not before.channel or before.channel.id != channel_id) and (not after.channel or after.channel.id != channel_id):
@@ -32,6 +33,10 @@ class TrapCog(commands.Cog):
                 if random.random() < self.VOICE_CHANCE:
                     victim = member
                     #await self.trigger_trap(channel_id, victim)
+                    triggered = True
+                    break
+            if triggered:
+                break
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
@@ -43,6 +48,7 @@ class TrapCog(commands.Cog):
         cursor.execute('SELECT channel_id, count FROM traps')
         traps = cursor.fetchall()
 
+        triggered = False
         for channel_id, count in traps:
             # if channel matches
             if message.channel.id == channel_id:
@@ -51,6 +57,10 @@ class TrapCog(commands.Cog):
                     if random.random() < self.MESSAGE_CHANCE:
                         victim = message.author
                         await self.trigger_trap(channel_id, victim)
+                        triggered = True
+                        break
+            if triggered:
+                break
 
     @tasks.loop(minutes=1)
     async def vc_trap_loop(self):
@@ -59,6 +69,7 @@ class TrapCog(commands.Cog):
         cursor.execute('SELECT channel_id, count FROM traps')
         traps = cursor.fetchall()
 
+        triggered = False
         for channel_id, count in traps:
             channel = self.bot.get_channel(channel_id)
             # skip if not voice channel
@@ -71,6 +82,12 @@ class TrapCog(commands.Cog):
                     if members:
                         victim = random.choice(members)
                         await self.trigger_trap(channel_id, victim)
+                        triggered = True
+                        break
+            if triggered:
+                break
+
+
 
     async def trigger_trap(self, channel_id: int, victim: Member):
         # record victim, decrement trap count

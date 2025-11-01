@@ -14,11 +14,11 @@ class TrapCog(commands.Cog):
     def __init__(self, bot: commands.Bot, conn: sqlite3.Connection):
         self.bot = bot
         self.conn = conn
+        self.vc_trap_loop.start()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
         cursor = self.conn.cursor()
-
         # get all traps
         cursor.execute('SELECT channel_id, count FROM traps')
         traps = cursor.fetchall()
@@ -32,6 +32,7 @@ class TrapCog(commands.Cog):
             for _ in range(count):
                 if random.random() < self.VOICE_CHANCE:
                     victim = member
+                    print(f'Voice state trap - {victim.name}')
                     #await self.trigger_trap(channel_id, victim)
                     triggered = True
                     break
@@ -56,6 +57,7 @@ class TrapCog(commands.Cog):
                 for _ in range(count):
                     if random.random() < self.MESSAGE_CHANCE:
                         victim = message.author
+                        print(f'Message trap - {victim.name}')
                         await self.trigger_trap(channel_id, victim)
                         triggered = True
                         break
@@ -81,13 +83,12 @@ class TrapCog(commands.Cog):
                     members = channel.members
                     if members:
                         victim = random.choice(members)
+                        print(f'VC loop trap - {victim.name}')
                         await self.trigger_trap(channel_id, victim)
                         triggered = True
                         break
             if triggered:
                 break
-
-
 
     async def trigger_trap(self, channel_id: int, victim: Member):
         # record victim, decrement trap count
@@ -128,7 +129,12 @@ class TrapCog(commands.Cog):
                 weights=list(functions.values()),
                 k=1
             )[0]
+            print(f'Trying trap - {fun.__name__}')
             success = await fun(channel_id, victim)
+        if success and fun:
+            print(f'Trap executed - {fun.__name__} {victim.name}')
+        else:
+            print(f'Trap execution failed - {victim.name}')
 
     # times out victim
     async def trap_timeout(self, _: int, victim: Member):

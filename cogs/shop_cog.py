@@ -21,12 +21,14 @@ class ShopCog(commands.Cog):
 
     @app_commands.command(name='trap', description=f'Setup a trap in a channel - {TRAP_COST} 🍌')
     async def trap(self, interaction: Interaction, channel: VoiceChannel | TextChannel):
-        cursor = self.conn.cursor()
+        print(f'{interaction.user.name}: /trap {channel.name}')
 
+        cursor = self.conn.cursor()
         # check balance
         cursor.execute('SELECT bananas FROM users WHERE user_id = ?', (interaction.user.id,))
         result = cursor.fetchone()
         if not result or result[0] < self.TRAP_COST:
+            print(f'Insufficient funds - {interaction.user.name}')
             embed = Embed(
                 title='Insufficient Funds 🍌',
                 description=f'You need at least {self.TRAP_COST} 🍌 to set a trap.',
@@ -35,6 +37,7 @@ class ShopCog(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
+        print(f'Purchase successful - {interaction.user.name}')
         # deduct cost and set trap
         cursor.execute('UPDATE users SET bananas = bananas - ? WHERE user_id = ?', (self.TRAP_COST, interaction.user.id,))
         cursor.execute('''
@@ -52,12 +55,14 @@ class ShopCog(commands.Cog):
 
     @app_commands.command(name='minefield', description=f'Makes minefield from a channel - {MINEFIELD_COST} 🍌')
     async def minefield(self, interaction: Interaction, channel: VoiceChannel | TextChannel):
-        cursor = self.conn.cursor()
+        print(f'{interaction.user.name}: /minefield {channel.name}')
 
+        cursor = self.conn.cursor()
         # check balance
         cursor.execute('SELECT bananas FROM users WHERE user_id = ?', (interaction.user.id,))
         result = cursor.fetchone()
         if not result or result[0] < self.MINEFIELD_COST:
+            print(f'Insufficient funds - {interaction.user.name}')
             embed = Embed(
                 title='Insufficient Funds 🍌',
                 description=f'You need at least {self.MINEFIELD_COST} 🍌 to create a minefield.',
@@ -66,6 +71,7 @@ class ShopCog(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
+        print(f'Purchase successful - {interaction.user.name}')
         # deduct cost and set minefield
         cursor.execute('UPDATE users SET bananas = bananas - ? WHERE user_id = ?', (self.MINEFIELD_COST, interaction.user.id,))
         cursor.execute('''
@@ -99,13 +105,13 @@ class ShopCog(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
         cursor = self.conn.cursor()
-
         # check and award daily reward
         cursor.execute('SELECT last_daily FROM users WHERE user_id = ?', (member.id,))
         result = cursor.fetchone()
         today = discord.utils.utcnow().date().isoformat()
 
         if not result or result[0] != today:
+            print(f'Daily reward - {member.name}')
             cursor.execute('''
             INSERT INTO users (user_id, bananas, last_daily) VALUES (?, ?, ?)
             ON CONFLICT DO UPDATE SET bananas = bananas + ?, last_daily = ?

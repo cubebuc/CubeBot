@@ -82,6 +82,8 @@ class WakeCog(commands.Cog):
     @app_commands.command(name='wake', description='Wake someone up!')
     @app_commands.describe(member='Who to wake up')
     async def wake(self, interaction: Interaction, member: Member):
+        print(f'{interaction.user.name}: /wake {member.name}')
+
         # skip if already bouncing
         if member.id in self.tasks:
             await interaction.response.send_message(f'Chill out... {member.nick or member.name} will wake up eventually.', ephemeral=True)
@@ -113,6 +115,8 @@ class WakeCog(commands.Cog):
     @app_commands.command(name='wakes', description='Wakes someone up!')
     @app_commands.describe(members='Who to wakes up')
     async def wakes(self, interaction: Interaction, members: str):
+        print(f'{interaction.user.name}: /wakes {members}')
+
         names = []
         for mention in members.split():
             # parse user mention

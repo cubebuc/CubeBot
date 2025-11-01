@@ -11,14 +11,14 @@ from cogs import WakeCog, ShopCog, TrapCog
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler = logging.FileHandler(filename='data/discord.log', encoding='utf-8', mode='w')
 
 intents = discord.Intents.default()
 intents.members = True
 
 bot = commands.Bot(command_prefix='$', intents=intents)
 
-conn = sqlite3.connect('cubebot.db')
+conn = sqlite3.connect('data/cubebot.db')
 cursor = conn.cursor()
 
 cursor.execute('''

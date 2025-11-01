@@ -6,5 +6,5 @@ services:
     container_name: bot
     build: .
     volumes:
-      - ./cubebot.db:/app/cubebot.db
+      - ./data:/app/data
     restart: unless-stopped

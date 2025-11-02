@@ -91,15 +91,6 @@ class TrapCog(commands.Cog):
                 break
 
     async def trigger_trap(self, channel_id: int, victim: Member):
-        # record victim, decrement trap count
-        cursor = self.conn.cursor()
-        cursor.execute('''
-        INSERT INTO users (user_id, victim) VALUES (?, 1)
-        ON CONFLICT DO UPDATE SET victim = victim + 1
-        ''', (victim.id,))
-        cursor.execute('UPDATE traps SET count = count - 1 WHERE channel_id = ?', (channel_id,))
-        self.conn.commit()
-
         # choose weighted function and execute it
         functions = {
             self.trap_timeout: 1,
@@ -133,6 +124,14 @@ class TrapCog(commands.Cog):
             success = await fun(channel_id, victim)
         if success and fun:
             print(f'Trap executed - {fun.__name__} {victim.name}')
+            # record victim, decrement trap count
+            cursor = self.conn.cursor()
+            cursor.execute('''
+            INSERT INTO users (user_id, victim) VALUES (?, 1)
+            ON CONFLICT DO UPDATE SET victim = victim + 1
+            ''', (victim.id,))
+            cursor.execute('UPDATE traps SET count = count - 1 WHERE channel_id = ?', (channel_id,))
+            self.conn.commit()
         else:
             print(f'Trap execution failed - {victim.name}')
 

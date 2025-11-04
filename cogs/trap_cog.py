@@ -18,7 +18,7 @@ class TrapCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
-        cursor = self.conn.cursor()
+        """cursor = self.conn.cursor()
         # get all traps
         cursor.execute('SELECT channel_id, count FROM traps')
         traps = cursor.fetchall()
@@ -33,11 +33,11 @@ class TrapCog(commands.Cog):
                 if random.random() < self.VOICE_CHANCE:
                     victim = member
                     print(f'Voice state trap - {victim.name}')
-                    #await self.trigger_trap(channel_id, victim)
+                    await self.trigger_trap(victim)
                     triggered = True
                     break
             if triggered:
-                break
+                break"""
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
@@ -58,7 +58,7 @@ class TrapCog(commands.Cog):
                     if random.random() < self.MESSAGE_CHANCE:
                         victim = message.author
                         print(f'Message trap - {victim.name}')
-                        await self.trigger_trap(channel_id, victim)
+                        await self.trigger_trap(victim, message)
                         triggered = True
                         break
             if triggered:
@@ -84,14 +84,13 @@ class TrapCog(commands.Cog):
                     if members:
                         victim = random.choice(members)
                         print(f'VC loop trap - {victim.name}')
-                        await self.trigger_trap(channel_id, victim)
+                        await self.trigger_trap(victim)
                         triggered = True
                         break
             if triggered:
                 break
 
-    async def trigger_trap(self, channel_id: int, victim: Member):
-        # choose weighted function and execute it
+    async def trigger_trap(self, victim: Member, message: Message = None):
         functions = {
             self.trap_timeout: 1,
             self.trap_nickname: 1,
@@ -108,11 +107,19 @@ class TrapCog(commands.Cog):
             self.trap_react: 1
         }
 
-        if isinstance(victim.voice.channel, VoiceChannel):
+        if victim.voice:
             functions.update(vc_only_functions)
-        else:
+        if message:
             functions.update(tc_only_functions)
 
+        if message:
+            channel_id = message.channel.id
+        elif victim.voice:
+            channel_id = victim.voice.channel.id
+        else:
+            channel_id = None
+
+        fun = None
         success = False
         while not success:
             fun = random.choices(
@@ -201,7 +208,8 @@ class TrapCog(commands.Cog):
 
     # removes the victims last message from the trapped channel
     async def trap_remove(self, channel_id: int, victim: Member):
-        channel = self.bot.get_channel(channel_id)
+        guild = victim.guild
+        channel = guild.get_channel(channel_id)
         async for msg in channel.history(limit=20):
             if msg.author.id == victim.id:
                 await msg.delete()
@@ -210,7 +218,8 @@ class TrapCog(commands.Cog):
 
     # reacts to victims message
     async def trap_react(self, channel_id: int, victim: Member):
-        channel = self.bot.get_channel(channel_id)
+        guild = victim.guild
+        channel = guild.get_channel(channel_id)
         async for msg in channel.history(limit=20):
             if msg.author.id == victim.id:
                 await msg.add_reaction('🇲')

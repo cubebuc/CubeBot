@@ -49,4 +49,4 @@ async def on_ready():
 
     print(f'Logged in as {bot.user}')
 
-bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+bot.run(token, log_handler=handler, log_level=logging.INFO)

@@ -1,9 +1,8 @@
 import sqlite3
-import random
 
 import discord
-from discord import app_commands, Interaction, VoiceChannel, TextChannel, Embed, Color, Member, VoiceState, Message
-from discord.ext import commands, tasks
+from discord import app_commands, Interaction, VoiceChannel, TextChannel, Embed, Color, Member, VoiceState
+from discord.ext import commands
 
 
 class ShopCog(commands.Cog):
@@ -11,9 +10,6 @@ class ShopCog(commands.Cog):
     TRAP_COST = 50
     MINEFIELD_COST = 200
     MINEFIELD_TRAPS = 5
-    LOOP_CHANCE = 0.05
-    VOICE_CHANCE = 0.05
-    MESSAGE_CHANCE = 0.1
 
     def __init__(self, bot: commands.Bot, conn: sqlite3.Connection):
         self.bot = bot

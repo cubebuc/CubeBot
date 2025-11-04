@@ -2,7 +2,7 @@ import sqlite3
 import random
 from datetime import timedelta
 
-from discord import VoiceChannel, TextChannel, Embed, Color, Member, VoiceState, Message
+from discord import VoiceChannel, Member, VoiceState, Message
 from discord.ext import commands, tasks
 
 

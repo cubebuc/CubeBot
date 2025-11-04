@@ -18,6 +18,7 @@ class TrapCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
+        pass
         """cursor = self.conn.cursor()
         # get all traps
         cursor.execute('SELECT channel_id, count FROM traps')
@@ -64,7 +65,7 @@ class TrapCog(commands.Cog):
             if triggered:
                 break
 
-    @tasks.loop(minutes=1)
+    @tasks.loop(minutes=5)
     async def vc_trap_loop(self):
         cursor = self.conn.cursor()
         # get all traps

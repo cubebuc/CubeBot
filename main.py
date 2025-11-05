@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from cogs import WakeCog, ShopCog, TrapCog
+from cogs import WakeCog, ShopCog, TrapCog, GambleCog
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -45,6 +45,7 @@ async def on_ready():
     await bot.add_cog(WakeCog(conn), guild=guild)
     await bot.add_cog(ShopCog(bot, conn), guild=guild)
     await bot.add_cog(TrapCog(bot, conn), guild=guild)
+    await bot.add_cog(GambleCog(bot, conn), guild=guild)
     await bot.tree.sync(guild=guild)
 
     print(f'Logged in as {bot.user}')

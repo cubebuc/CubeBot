@@ -11,7 +11,7 @@ from discord.ui import View, Button
 class GambleCog(commands.Cog):
     SLOT_SYMBOLS = ['🍒', '🍋', '🍊', '🍉', '🍇', '⭐', '7️⃣']
     SLOT_WEIGHTS = [10, 9, 8, 7, 5, 2, 1]  # 1.015
-    SLOT_PAYOUTS = [2, 3, 4, 5, 8, 15, 50]
+    SLOT_PAYOUTS = [2, 3, 4, 5, 10, 20, 50]
     SLOT_JACKPOT_PAYOUT = 100
 
     def __init__(self, bot: commands.Bot, conn: sqlite3.Connection):
@@ -45,27 +45,27 @@ class GambleCog(commands.Cog):
         embed.add_field(
             name='',
             value=(
-                '🍒 x2\n'
-                '🍋 x3\n'
-                '🍊 x4'
+                f'🍒 x{self.SLOT_PAYOUTS[0]}\n'
+                f'🍋 x{self.SLOT_PAYOUTS[1]}\n'
+                f'🍊 x{self.SLOT_PAYOUTS[2]}'
             )
         )
         embed.add_field(name='', value='')
         embed.add_field(
             name='',
             value=(
-                '🍉 x5\n'
-                '🍇 x8\n'
-                '⭐ x15'
+                f'🍉 x{self.SLOT_PAYOUTS[3]}\n'
+                f'🍇 x{self.SLOT_PAYOUTS[4]}\n'
+                f'⭐ x{self.SLOT_PAYOUTS[5]}'
             )
         )
         embed.add_field(
             name='',
             value=(
-                '7️⃣ x50'
+                f'7️⃣ x{self.SLOT_PAYOUTS[6]}'
             )
         )
-        embed.add_field(name='', value='JACKPOT x100')
+        embed.add_field(name='', value=f'JACKPOT x{self.SLOT_JACKPOT_PAYOUT}')
         embed.add_field(name='', value='', inline=False)
         slots = [[random.choices(self.SLOT_SYMBOLS, weights=self.SLOT_WEIGHTS)[0] for _ in range(3)] for _ in range(3)]
         embed.add_field(name='', value=f'{format_slots(slots)}', inline=False)

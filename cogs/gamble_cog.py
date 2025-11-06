@@ -71,9 +71,11 @@ class GambleCog(commands.Cog):
         embed.add_field(name='', value=f'{format_slots(slots)}', inline=False)
         embed.add_field(name=f'Last spin: 0 🍌', value=f'Net: 0 🍌\nBet: {amount} 🍌', inline=False)
 
+        winnings = 0
         net = 0
         async def button_callback(interaction: Interaction):
             nonlocal slots
+            nonlocal winnings
             nonlocal net
 
             cursor = self.conn.cursor()
@@ -85,6 +87,9 @@ class GambleCog(commands.Cog):
                 return
             elif embed.footer.text != '':
                 embed.set_footer(text='')
+
+            net -= amount
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
 
             button.disabled = True
             await interaction.response.edit_message(view=view, embed=embed)
@@ -122,7 +127,7 @@ class GambleCog(commands.Cog):
                     symbol_index = self.SLOT_SYMBOLS.index(slots[0][2])
                     winnings += amount * self.SLOT_PAYOUTS[symbol_index]
 
-            net += winnings - amount
+            net += winnings
             embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
             print(f'{interaction.user.name} won {winnings} (net {net})')
 

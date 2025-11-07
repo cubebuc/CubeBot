@@ -1,10 +1,9 @@
-import asyncio
-import sqlite3
 import random
+import sqlite3
 
 import discord
-from discord import app_commands, Interaction, Embed, Color, Member, Emoji
-from discord.ext import commands, tasks
+from discord import app_commands, Interaction, Embed, Color
+from discord.ext import commands
 from discord.ui import View, Button
 
 
@@ -22,9 +21,10 @@ class GambleCog(commands.Cog):
     @app_commands.describe(amount='The amount of 🍌 you want to gamble')
     async def gamba(self, interaction: Interaction, amount: int):
         embed = Embed(
-            title='GAMBA',
+            title=f'GAMBA',
             color=Color.gold()
         )
+        embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
 
         # formats the 2D array into emoji art
         def format_slots(slots: list[list[str]]) -> str:
@@ -71,38 +71,7 @@ class GambleCog(commands.Cog):
         embed.add_field(name='', value=f'{format_slots(slots)}', inline=False)
         embed.add_field(name=f'Last spin: 0 🍌', value=f'Net: 0 🍌\nBet: {amount} 🍌', inline=False)
 
-        winnings = 0
-        net = 0
-        async def button_callback(interaction: Interaction):
-            nonlocal slots
-            nonlocal winnings
-            nonlocal net
-
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT bananas FROM users WHERE user_id = ?', (interaction.user.id,))
-            result = cursor.fetchone()
-            if result is None or result[0] < amount:
-                embed.set_footer(text='❌ You do not have enough 🍌 to gamble ❌')
-                await interaction.response.edit_message(embed=embed)
-                return
-            elif embed.footer.text != '':
-                embed.set_footer(text='')
-
-            net -= amount
-            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
-
-            button.disabled = True
-            await interaction.response.edit_message(view=view, embed=embed)
-            for col in range(3):
-                for _ in range(5):
-                    # shift down, generate new top
-                    slots[2][col] = slots[1][col]
-                    slots[1][col] = slots[0][col]
-                    slots[0][col] = random.choices(self.SLOT_SYMBOLS, weights=self.SLOT_WEIGHTS)[0]
-                    embed.set_field_at(6, name='', value=f'{format_slots(slots)}', inline=False)
-                    await interaction.edit_original_response(embed=embed)
-
-            # calculate winnings
+        def calculate_winnings(slots: list[list[str]], amount: int) -> int:
             winnings = 0
             # check jackpot
             if all(slots[0][0] == slots[row][col] for row in range(3) for col in range(3)):
@@ -126,17 +95,80 @@ class GambleCog(commands.Cog):
                 if slots[0][2] == slots[1][1] == slots[2][0]:
                     symbol_index = self.SLOT_SYMBOLS.index(slots[0][2])
                     winnings += amount * self.SLOT_PAYOUTS[symbol_index]
+            return winnings
+
+        winnings = 0
+        net = 0
+        async def spin_button_callback(interaction_btn: Interaction):
+            # ensure only the original user can interact
+            if interaction_btn.user.id != interaction.user.id:
+                await interaction_btn.response.send_message('Summon your own gamba!', ephemeral=True)
+                return
+
+            nonlocal slots
+            nonlocal winnings
+            nonlocal net
+
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT bananas FROM users WHERE user_id = ?', (interaction_btn.user.id,))
+            result = cursor.fetchone()
+            if result is None or result[0] < amount:
+                embed.set_footer(text='❌ You do not have enough 🍌 to gamble ❌')
+                await interaction_btn.response.edit_message(embed=embed)
+                return
+            elif embed.footer.text != '':
+                embed.set_footer(text='')
+
+            net -= amount
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
+
+            button.disabled = True
+            await interaction_btn.response.edit_message(view=view, embed=embed)
+            for col in range(3):
+                for _ in range(5):
+                    # shift down, generate new top
+                    slots[2][col] = slots[1][col]
+                    slots[1][col] = slots[0][col]
+                    slots[0][col] = random.choices(self.SLOT_SYMBOLS, weights=self.SLOT_WEIGHTS)[0]
+                    embed.set_field_at(6, name='', value=f'{format_slots(slots)}', inline=False)
+                    await interaction_btn.edit_original_response(embed=embed)
+
+            winnings = calculate_winnings(slots, amount)
+
+            # update database
+            cursor.execute('UPDATE users SET bananas = bananas - ? + ? WHERE user_id = ?', (amount, winnings, interaction_btn.user.id))
+            self.conn.commit()
 
             net += winnings
-            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
-            print(f'{interaction.user.name} won {winnings} (net {net})')
+            print(f'{interaction_btn.user.name} won {winnings} (net {net})')
 
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
             button.disabled = False
-            await interaction.edit_original_response(embed=embed, view=view)
+            await interaction_btn.edit_original_response(embed=embed, view=view)
 
         view = View()
         button = Button(label=f'🍌 SPIN 🍌', style=discord.ButtonStyle.primary)
-        button.callback = button_callback
+        button.callback = spin_button_callback
         view.add_item(button)
 
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        # init embed+view with private/public choice buttons
+        async def private_callback(interaction_priv: Interaction):
+            await interaction_priv.response.edit_message(embed=embed, view=view)
+        async def public_callback(interaction_pub: Interaction):
+            await interaction.delete_original_response()
+            await interaction_pub.response.send_message(embed=embed, view=view, ephemeral=False)
+
+        init_embed = Embed(
+            title=f'GAMBA',
+            color=Color.gold()
+        )
+
+        init_view = View()
+        private_button = Button(label='Private', style=discord.ButtonStyle.success)
+        public_button = Button(label='Public', style=discord.ButtonStyle.primary)
+        private_button.callback = private_callback
+        public_button.callback = public_callback
+        init_view.add_item(private_button)
+        init_view.add_item(public_button)
+
+        await interaction.response.send_message(embed=init_embed, view=init_view, ephemeral=True)

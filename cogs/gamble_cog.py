@@ -20,8 +20,13 @@ class GambleCog(commands.Cog):
     @app_commands.command(name='gamba', description='Gamble your points for a chance to win more!')
     @app_commands.describe(amount='The amount of 🍌 you want to gamble')
     async def gamba(self, interaction: Interaction, amount: int):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT lifetime_net FROM users WHERE user_id = ?', (interaction.user.id,))
+        result = cursor.fetchone()
+        lifetime_net = result[0] if result else 0
+
         embed = Embed(
-            title=f'GAMBA',
+            title=f'GAMBA - {amount} 🍌',
             color=Color.gold()
         )
         embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
@@ -69,7 +74,7 @@ class GambleCog(commands.Cog):
         embed.add_field(name='', value='', inline=False)
         slots = [[random.choices(self.SLOT_SYMBOLS, weights=self.SLOT_WEIGHTS)[0] for _ in range(3)] for _ in range(3)]
         embed.add_field(name='', value=f'{format_slots(slots)}', inline=False)
-        embed.add_field(name=f'Last spin: 0 🍌', value=f'Net: 0 🍌\nBet: {amount} 🍌', inline=False)
+        embed.add_field(name=f'Last spin: 0 🍌', value=f'Net: 0 🍌\nLifetime Net: {lifetime_net} 🍌', inline=False)
 
         def calculate_winnings(slots: list[list[str]], amount: int) -> int:
             winnings = 0
@@ -108,8 +113,8 @@ class GambleCog(commands.Cog):
             nonlocal slots
             nonlocal winnings
             nonlocal net
+            nonlocal lifetime_net
 
-            cursor = self.conn.cursor()
             cursor.execute('SELECT bananas FROM users WHERE user_id = ?', (interaction_btn.user.id,))
             result = cursor.fetchone()
             if result is None or result[0] < amount:
@@ -120,7 +125,8 @@ class GambleCog(commands.Cog):
                 embed.set_footer(text='')
 
             net -= amount
-            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
+            lifetime_net -= amount
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nLifetime Net: {lifetime_net} 🍌\n', inline=False)
 
             button.disabled = True
             await interaction_btn.response.edit_message(view=view, embed=embed)
@@ -134,15 +140,15 @@ class GambleCog(commands.Cog):
                     await interaction_btn.edit_original_response(embed=embed)
 
             winnings = calculate_winnings(slots, amount)
-
-            # update database
-            cursor.execute('UPDATE users SET bananas = bananas - ? + ? WHERE user_id = ?', (amount, winnings, interaction_btn.user.id))
-            self.conn.commit()
-
             net += winnings
+            lifetime_net += winnings
             print(f'{interaction_btn.user.name} won {winnings} (net {net})')
 
-            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nBet: {amount} 🍌', inline=False)
+            # update database
+            cursor.execute('UPDATE users SET bananas = bananas - ? + ?, lifetime_net = ? WHERE user_id = ?', (amount, winnings, lifetime_net, interaction_btn.user.id,))
+            self.conn.commit()
+
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nLifetime Net: {lifetime_net} 🍌\n', inline=False)
             button.disabled = False
             await interaction_btn.edit_original_response(embed=embed, view=view)
 
@@ -164,8 +170,8 @@ class GambleCog(commands.Cog):
         )
 
         init_view = View()
-        private_button = Button(label='Private', style=discord.ButtonStyle.success)
-        public_button = Button(label='Public', style=discord.ButtonStyle.primary)
+        private_button = Button(label='Private', style=discord.ButtonStyle.danger)
+        public_button = Button(label='Public', style=discord.ButtonStyle.success)
         private_button.callback = private_callback
         public_button.callback = public_callback
         init_view.add_item(private_button)

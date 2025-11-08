@@ -17,6 +17,8 @@ class GambleCog(commands.Cog):
     DAILY_SPINS = 5
     DAILY_SPINS_BET = 20
 
+    active_slots = defaultdict(list)
+
     def __init__(self, bot: commands.Bot, conn: sqlite3.Connection):
         self.bot = bot
         self.conn = conn
@@ -31,11 +33,14 @@ class GambleCog(commands.Cog):
         result = cursor.fetchone()
         today = discord.utils.utcnow().date().isoformat()
         if not result or result[0] != today:
+            daily_spins = self.DAILY_SPINS
             cursor.execute('''
                 INSERT INTO users (user_id, daily_spins, last_daily) VALUES (?, ?, ?)
                 ON CONFLICT DO UPDATE SET daily_spins = ?, last_daily = ?
             ''', (interaction.user.id, self.DAILY_SPINS, today, self.DAILY_SPINS, today))
             self.conn.commit()
+        else:
+            daily_spins = result[1]
 
         embed = Embed(
             title=f'GAMBA - {amount} 🍌',
@@ -183,17 +188,26 @@ class GambleCog(commands.Cog):
             result = cursor.fetchone()
             if result is None or result[0] <= 0:
                 embed.set_footer(text='❌ You have no daily spins left ❌')
-                await interaction_btn.response.edit_message(embed=embed)
+                daily_spin_button.label = f'🎟️ DAILY SPIN (0 left) 🎟️'
+                await interaction_btn.response.edit_message(embed=embed, view=view)
                 return
             elif embed.footer.text != '':
                 embed.set_footer(text='')
 
+            # deduct daily spin
             cursor.execute('UPDATE users SET daily_spins = daily_spins - 1 WHERE user_id = ?', (interaction_btn.user.id,))
             self.conn.commit()
+
+            daily_spins_left = result[0] - 1
+            daily_spin_button.label = f'🎟️ DAILY SPIN ({daily_spins_left} left) 🎟️'
 
             spin_button.disabled = True
             daily_spin_button.disabled = True
             await interaction_btn.response.edit_message(view=view, embed=embed)
+            # update all active views for this user
+            for (interaction_other, v) in self.active_slots[interaction.user.id]:
+                v.children[1].label = daily_spin_button.label
+                await interaction_other.edit_original_response(view=v)
 
             await spin_slots(interaction_btn)
 
@@ -216,28 +230,30 @@ class GambleCog(commands.Cog):
                 description='This casino has already closed.',
                 color=Color.dark_gold()
             )
-            try:
-                await interaction.edit_original_response(embed=embed, view=None)
-            except discord.NotFound:
-                pass
+            await original_interaction.edit_original_response(embed=embed, view=None)
 
         view = View()
         view.on_timeout = view_timeout
         spin_button = Button(label=f'🍌 SPIN 🍌', style=discord.ButtonStyle.primary)
-        daily_spin_button = Button(label=f'🎟️ DAILY SPIN 🎟️', style=discord.ButtonStyle.success)
+        daily_spin_button = Button(label=f'🎟️ DAILY SPIN ({daily_spins} left) 🎟️', style=discord.ButtonStyle.success)
         spin_button.callback = spin_button_callback
         daily_spin_button.callback = daily_spin_button_callback
         view.add_item(spin_button)
         view.add_item(daily_spin_button)
 
+        original_interaction = interaction
         # init embed+view with private/public choice buttons
         async def private_callback(interaction_priv: Interaction):
             init_view.stop()
             await interaction_priv.response.edit_message(embed=embed, view=view)
+            self.active_slots[interaction.user.id].append((interaction, view))
         async def public_callback(interaction_pub: Interaction):
             init_view.stop()
             await interaction.delete_original_response()
             await interaction_pub.response.send_message(embed=embed, view=view, ephemeral=False)
+            nonlocal original_interaction
+            original_interaction = interaction_pub
+            self.active_slots[interaction.user.id].append((interaction_pub, view))
 
         init_embed = Embed(
             title=f'GAMBA',

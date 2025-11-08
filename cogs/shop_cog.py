@@ -97,19 +97,3 @@ class ShopCog(commands.Cog):
             color=Color.yellow()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
-        cursor = self.conn.cursor()
-        # check and award daily reward
-        cursor.execute('SELECT last_daily FROM users WHERE user_id = ?', (member.id,))
-        result = cursor.fetchone()
-        today = discord.utils.utcnow().date().isoformat()
-
-        if not result or result[0] != today:
-            print(f'Daily reward - {member.name}')
-            cursor.execute('''
-            INSERT INTO users (user_id, bananas, last_daily) VALUES (?, ?, ?)
-            ON CONFLICT DO UPDATE SET bananas = bananas + ?, last_daily = ?
-            ''', (member.id, self.DAILY_REWARD, today, self.DAILY_REWARD, today))
-            self.conn.commit()

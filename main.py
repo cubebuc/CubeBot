@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
     bananas INTEGER DEFAULT 0,
     lifetime_net INTEGER DEFAULT 0,
     last_daily TEXT,
+    daily_spins INTEGER DEFAULT 0,
     abuser INTEGER DEFAULT 0,
     victim INTEGER DEFAULT 0
 )

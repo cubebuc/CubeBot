@@ -1,5 +1,6 @@
 import random
 import sqlite3
+from collections import defaultdict
 
 import discord
 from discord import app_commands, Interaction, Embed, Color
@@ -13,6 +14,9 @@ class GambleCog(commands.Cog):
     SLOT_PAYOUTS = [2, 3, 4, 5, 10, 20, 50]
     SLOT_JACKPOT_PAYOUT = 100
 
+    DAILY_SPINS = 5
+    DAILY_SPINS_BET = 20
+
     def __init__(self, bot: commands.Bot, conn: sqlite3.Connection):
         self.bot = bot
         self.conn = conn
@@ -21,9 +25,17 @@ class GambleCog(commands.Cog):
     @app_commands.describe(amount='The amount of 🍌 you want to gamble')
     async def gamba(self, interaction: Interaction, amount: int):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT lifetime_net FROM users WHERE user_id = ?', (interaction.user.id,))
+
+        # check and update daily spins
+        cursor.execute('SELECT last_daily, daily_spins FROM users WHERE user_id = ?', (interaction.user.id,))
         result = cursor.fetchone()
-        lifetime_net = result[0] if result else 0
+        today = discord.utils.utcnow().date().isoformat()
+        if not result or result[0] != today:
+            cursor.execute('''
+                INSERT INTO users (user_id, daily_spins, last_daily) VALUES (?, ?, ?)
+                ON CONFLICT DO UPDATE SET daily_spins = ?, last_daily = ?
+            ''', (interaction.user.id, self.DAILY_SPINS, today, self.DAILY_SPINS, today))
+            self.conn.commit()
 
         embed = Embed(
             title=f'GAMBA - {amount} 🍌',
@@ -74,7 +86,17 @@ class GambleCog(commands.Cog):
         embed.add_field(name='', value='', inline=False)
         slots = [[random.choices(self.SLOT_SYMBOLS, weights=self.SLOT_WEIGHTS)[0] for _ in range(3)] for _ in range(3)]
         embed.add_field(name='', value=f'{format_slots(slots)}', inline=False)
-        embed.add_field(name=f'Last spin: 0 🍌', value=f'Net: 0 🍌\nLifetime Net: {lifetime_net} 🍌', inline=False)
+        embed.add_field(name=f'Last spin: 0 🍌', value=f'Net: 0 🍌', inline=False)
+
+        async def spin_slots(interaction_spin: Interaction):
+            for col in range(3):
+                for _ in range(5):
+                    # shift down, generate new top
+                    slots[2][col] = slots[1][col]
+                    slots[1][col] = slots[0][col]
+                    slots[0][col] = random.choices(self.SLOT_SYMBOLS, weights=self.SLOT_WEIGHTS)[0]
+                    embed.set_field_at(6, name='', value=f'{format_slots(slots)}', inline=False)
+                    await interaction_spin.edit_original_response(embed=embed)
 
         def calculate_winnings(slots: list[list[str]], amount: int) -> int:
             winnings = 0
@@ -110,10 +132,8 @@ class GambleCog(commands.Cog):
                 await interaction_btn.response.send_message('Summon your own gamba!', ephemeral=True)
                 return
 
-            nonlocal slots
             nonlocal winnings
             nonlocal net
-            nonlocal lifetime_net
 
             cursor.execute('SELECT bananas FROM users WHERE user_id = ?', (interaction_btn.user.id,))
             result = cursor.fetchone()
@@ -124,43 +144,98 @@ class GambleCog(commands.Cog):
             elif embed.footer.text != '':
                 embed.set_footer(text='')
 
-            net -= amount
-            lifetime_net -= amount
-            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nLifetime Net: {lifetime_net} 🍌\n', inline=False)
+            # deduct bet
+            cursor.execute('UPDATE users SET bananas = bananas - ?, lifetime_net = lifetime_net - ? WHERE user_id = ?', (amount, amount, interaction_btn.user.id,))
+            self.conn.commit()
 
-            button.disabled = True
+            net -= amount
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌', inline=False)
+
+            spin_button.disabled = True
+            daily_spin_button.disabled = True
             await interaction_btn.response.edit_message(view=view, embed=embed)
-            for col in range(3):
-                for _ in range(5):
-                    # shift down, generate new top
-                    slots[2][col] = slots[1][col]
-                    slots[1][col] = slots[0][col]
-                    slots[0][col] = random.choices(self.SLOT_SYMBOLS, weights=self.SLOT_WEIGHTS)[0]
-                    embed.set_field_at(6, name='', value=f'{format_slots(slots)}', inline=False)
-                    await interaction_btn.edit_original_response(embed=embed)
+
+            await spin_slots(interaction_btn)
 
             winnings = calculate_winnings(slots, amount)
             net += winnings
-            lifetime_net += winnings
             print(f'{interaction_btn.user.name} won {winnings} (net {net})')
 
             # update database
-            cursor.execute('UPDATE users SET bananas = bananas - ? + ?, lifetime_net = ? WHERE user_id = ?', (amount, winnings, lifetime_net, interaction_btn.user.id,))
+            cursor.execute('UPDATE users SET bananas = bananas + ?, lifetime_net = lifetime_net + ? WHERE user_id = ?', (winnings, winnings, interaction_btn.user.id,))
             self.conn.commit()
 
-            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\nLifetime Net: {lifetime_net} 🍌\n', inline=False)
-            button.disabled = False
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌', inline=False)
+            spin_button.disabled = False
+            daily_spin_button.disabled = False
             await interaction_btn.edit_original_response(embed=embed, view=view)
 
+        async def daily_spin_button_callback(interaction_btn: Interaction):
+            # ensure only the original user can interact
+            if interaction_btn.user.id != interaction.user.id:
+                await interaction_btn.response.send_message('Summon your own gamba!', ephemeral=True)
+                return
+
+            nonlocal winnings
+            nonlocal net
+
+            cursor.execute('SELECT daily_spins FROM users WHERE user_id = ?', (interaction_btn.user.id,))
+            result = cursor.fetchone()
+            if result is None or result[0] <= 0:
+                embed.set_footer(text='❌ You have no daily spins left ❌')
+                await interaction_btn.response.edit_message(embed=embed)
+                return
+            elif embed.footer.text != '':
+                embed.set_footer(text='')
+
+            cursor.execute('UPDATE users SET daily_spins = daily_spins - 1 WHERE user_id = ?', (interaction_btn.user.id,))
+            self.conn.commit()
+
+            spin_button.disabled = True
+            daily_spin_button.disabled = True
+            await interaction_btn.response.edit_message(view=view, embed=embed)
+
+            await spin_slots(interaction_btn)
+
+            winnings = calculate_winnings(slots, self.DAILY_SPINS_BET)
+            net += winnings
+            print(f'{interaction_btn.user.name} won {winnings} (net {net})')
+
+            # update database
+            cursor.execute('UPDATE users SET bananas = bananas + ?, lifetime_net = lifetime_net + ? WHERE user_id = ?', (winnings, winnings, interaction_btn.user.id,))
+            self.conn.commit()
+
+            embed.set_field_at(7, name=f'Last spin: {winnings}', value=f'Net: {net} 🍌\n', inline=False)
+            spin_button.disabled = False
+            daily_spin_button.disabled = False
+            await interaction_btn.edit_original_response(embed=embed, view=view)
+
+        async def view_timeout():
+            embed = Embed(
+                title='GAMBA',
+                description='This casino has already closed.',
+                color=Color.dark_gold()
+            )
+            try:
+                await interaction.edit_original_response(embed=embed, view=None)
+            except discord.NotFound:
+                pass
+
         view = View()
-        button = Button(label=f'🍌 SPIN 🍌', style=discord.ButtonStyle.primary)
-        button.callback = spin_button_callback
-        view.add_item(button)
+        view.on_timeout = view_timeout
+        spin_button = Button(label=f'🍌 SPIN 🍌', style=discord.ButtonStyle.primary)
+        daily_spin_button = Button(label=f'🎟️ DAILY SPIN 🎟️', style=discord.ButtonStyle.success)
+        spin_button.callback = spin_button_callback
+        daily_spin_button.callback = daily_spin_button_callback
+        view.add_item(spin_button)
+        view.add_item(daily_spin_button)
 
         # init embed+view with private/public choice buttons
         async def private_callback(interaction_priv: Interaction):
+            init_view.stop()
             await interaction_priv.response.edit_message(embed=embed, view=view)
         async def public_callback(interaction_pub: Interaction):
+            init_view.stop()
             await interaction.delete_original_response()
             await interaction_pub.response.send_message(embed=embed, view=view, ephemeral=False)
 
@@ -170,6 +245,7 @@ class GambleCog(commands.Cog):
         )
 
         init_view = View()
+        init_view.on_timeout = view_timeout
         private_button = Button(label='Private', style=discord.ButtonStyle.danger)
         public_button = Button(label='Public', style=discord.ButtonStyle.success)
         private_button.callback = private_callback
@@ -178,3 +254,17 @@ class GambleCog(commands.Cog):
         init_view.add_item(public_button)
 
         await interaction.response.send_message(embed=init_embed, view=init_view, ephemeral=True)
+
+    @app_commands.command(name='net', description='Check your lifetime net gains/losses from gambling')
+    async def net(self, interaction: Interaction):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT lifetime_net FROM users WHERE user_id = ?', (interaction.user.id,))
+        result = cursor.fetchone()
+        lifetime_net = result[0] if result else 0
+
+        embed = Embed(
+            title='Lifetime Net 🍌',
+            description=f'Your lifetime net from gambling is {lifetime_net} 🍌.',
+            color=Color.dark_gold()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)

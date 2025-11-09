@@ -14,7 +14,7 @@ class GambleCog(commands.Cog):
     SLOT_PAYOUTS = [2, 3, 4, 5, 10, 20, 50]
     SLOT_JACKPOT_PAYOUT = 100
 
-    DAILY_SPINS = 5
+    DAILY_SPINS = 100
     DAILY_SPINS_BET = 20
 
     active_slots = defaultdict(list)
@@ -143,7 +143,7 @@ class GambleCog(commands.Cog):
             cursor.execute('SELECT bananas FROM users WHERE user_id = ?', (interaction_btn.user.id,))
             result = cursor.fetchone()
             if result is None or result[0] < amount:
-                embed.set_footer(text='❌ You do not have enough 🍌 to gamble ❌')
+                embed.set_footer(text='❌ You don\'t have enough 🍌 to gamble ❌')
                 await interaction_btn.response.edit_message(embed=embed)
                 return
             elif embed.footer.text != '':
@@ -186,19 +186,18 @@ class GambleCog(commands.Cog):
 
             cursor.execute('SELECT daily_spins FROM users WHERE user_id = ?', (interaction_btn.user.id,))
             result = cursor.fetchone()
-            if result is None or result[0] <= 0:
-                embed.set_footer(text='❌ You have no daily spins left ❌')
-                daily_spin_button.label = f'🎟️ DAILY SPIN (0 left) 🎟️'
+            if result is None or result[0] < amount:
+                embed.set_footer(text='❌ You don\'t have enough daily 🍌 to gamble ❌')
                 await interaction_btn.response.edit_message(embed=embed, view=view)
                 return
             elif embed.footer.text != '':
                 embed.set_footer(text='')
 
             # deduct daily spin
-            cursor.execute('UPDATE users SET daily_spins = daily_spins - 1 WHERE user_id = ?', (interaction_btn.user.id,))
+            cursor.execute('UPDATE users SET daily_spins = daily_spins - ? WHERE user_id = ?', (amount, interaction_btn.user.id,))
             self.conn.commit()
 
-            daily_spins_left = result[0] - 1
+            daily_spins_left = result[0] - amount
             daily_spin_button.label = f'🎟️ DAILY SPIN ({daily_spins_left} left) 🎟️'
 
             spin_button.disabled = True
@@ -211,7 +210,7 @@ class GambleCog(commands.Cog):
 
             await spin_slots(interaction_btn)
 
-            winnings = calculate_winnings(slots, self.DAILY_SPINS_BET)
+            winnings = calculate_winnings(slots, amount)
             net += winnings
             print(f'{interaction_btn.user.name} won {winnings} (net {net})')
 

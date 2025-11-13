@@ -204,9 +204,21 @@ class GambleCog(commands.Cog):
             daily_spin_button.disabled = True
             await interaction_btn.response.edit_message(view=view, embed=embed)
             # update all active views for this user
+            valid_slots = []
             for (interaction_other, v) in self.active_slots[interaction.user.id]:
-                v.children[1].label = daily_spin_button.label
-                await interaction_other.edit_original_response(view=v)
+                try:
+                    v.children[1].label = daily_spin_button.label
+                    await interaction_other.edit_original_response(view=v)
+                    valid_slots.append((interaction_other, v))
+                # slot is invalid if it was deleted (NotFound) or timed out (HTTPException)
+                except (discord.NotFound, discord.HTTPException):
+                    pass
+
+            # keep only valid slots
+            if valid_slots:
+                self.active_slots[interaction.user.id] = valid_slots
+            else:
+                self.active_slots.pop(interaction.user.id, None)
 
             await spin_slots(interaction_btn)
 
@@ -224,6 +236,7 @@ class GambleCog(commands.Cog):
             await interaction_btn.edit_original_response(embed=embed, view=view)
 
         async def view_timeout():
+
             embed = Embed(
                 title='GAMBA',
                 description='This casino has already closed.',

@@ -8,3 +8,5 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    stdin_open: true
+    tty: true
